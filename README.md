@@ -13,6 +13,7 @@ Home Assistant 官方 **Tesla Fleet** 集成不支持中国大陆账号（官方
 | `lib/tesla_fleet_api/` | **打包了修改版的底层库**：`partner_login` / 刷新令牌的 token 交换端点按区域选择，中国区走 `auth.tesla.cn`（原库写死国际地址导致 `cannot_connect`） |
 | `strings.json` | 区域下拉新增 `China / 中国大陆` 选项 |
 | `config_flow.py` | 中国区选定时，域名注册提示链接指向中国区开发者门户 `developer.tesla.cn` |
+| `hacs.json` | **新增 HACS 2.x 必需配置文件**：HACS 按版本下载集成时必须能拉到该文件（缺失会报 `The version X ... can not be used with HACS`） |
 
 底层库 [`tesla-fleet-api`](https://pypi.org/project/tesla-fleet-api/) 原生支持中国区（`SERVERS` 包含 `cn → https://fleet-api.prd.cn.vn.cloud.tesla.cn`），因此无需重写任何逻辑。
 

@@ -9,5 +9,5 @@
   "iot_class": "cloud_polling",
   "loggers": ["tesla-fleet-api"],
   "requirements": ["bleak", "bleak-retry-connector", "protobuf", "aiofiles"],
-  "version": "1.2.0"
+  "version": "1.2.1"
 }
