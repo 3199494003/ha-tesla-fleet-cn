@@ -11,10 +11,10 @@ from typing import (
 )
 
 from tesla_fleet_api.const import LOGGER
-from tesla_fleet_api.exceptions import TeslaFleetError
+from tesla_fleet_api.exceptions import BluetoothUnconfirmedCommand, TeslaFleetError
 
 PrimaryT = TypeVar("PrimaryT")
-FallbackT = TypeVar("FallbackT")
+SecondaryT = TypeVar("SecondaryT")
 
 # A health check may be a static bool, a sync callable returning bool, or an
 # async callable returning bool. When omitted the router attempts the primary
@@ -29,13 +29,13 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-class Router(Generic[PrimaryT, FallbackT]):
+class Router(Generic[PrimaryT, SecondaryT]):
     """Routes method calls across an ordered list of backends, tried in order.
 
     Composes two or more instances that share a common method surface (e.g. a
-    :class:`VehicleBluetooth` primary and a cloud ``TeslemetryVehicle`` fallback,
-    or a local energy site and a cloud ``TeslemetryEnergySite`` fallback). The
-    first two backends are the required *primary* and *fallback*; any number of
+    :class:`VehicleBluetooth` primary and a cloud ``TeslemetryVehicle`` secondary,
+    or a local energy site and a cloud ``TeslemetryEnergySite`` secondary). The
+    first two backends are the required *primary* and *secondary*; any number of
     additional backends may follow and are tried, in order, after them. Method
     calls are dispatched dynamically:
 
@@ -49,11 +49,14 @@ class Router(Generic[PrimaryT, FallbackT]):
     backend that has them.
 
     Dispatch to a callable performs *per-command* failover: the backends that
-    expose the method are attempted in order, and if one raises any exception (a
-    connection failure or a mid-command transport error such as a write/notify
-    failure or a disconnect), the same call is automatically retried on the next
-    backend that has it, with the same arguments. The error only propagates when
-    every applicable backend fails, in which case the last error is raised.
+    expose the method are attempted in order, and if one raises any exception
+    other than ``BluetoothUnconfirmedCommand`` (a connection failure or a
+    provably pre-submission transport error such as notify setup or GATT
+    characteristic resolution failure), the same call is automatically retried
+    on the next backend that has it, with the same arguments. The error only
+    propagates when every applicable backend fails, in which case the last error
+    is raised. Each attempted backend emits a ``DEBUG`` log line with the routed
+    command name, backend class, and success/error result.
 
     .. warning::
 
@@ -67,6 +70,13 @@ class Router(Generic[PrimaryT, FallbackT]):
         commands should gate dispatch with an explicit health check (so a failing
         primary skips the primary entirely rather than replaying down the chain)
         or call the underlying backends directly.
+
+    ``BluetoothUnconfirmedCommand`` (a lost ack for a mutating BLE command
+    already written to the vehicle - see that exception's docstring) is the
+    one exception per-command failover deliberately does **not** replay: the
+    command may already have executed, so trying the next backend would risk
+    double-executing it. It propagates to the caller unchanged instead of
+    triggering failover, on any backend in the chain.
 
     The health check may be provided as a ``bool``, a sync callable, or an async
     callable returning ``bool``. It gates **only the first backend** (the
@@ -98,13 +108,13 @@ class Router(Generic[PrimaryT, FallbackT]):
     def __init__(
         self,
         primary: PrimaryT,
-        fallback: FallbackT,
+        secondary: SecondaryT,
         *more_backends: Any,
         health: HealthCheck | None = None,
     ):
-        # The two-argument ``Router(primary, fallback, health=...)`` form is
+        # The two-argument ``Router(primary, secondary, health=...)`` form is
         # preserved exactly; additional positional backends extend the chain.
-        self._backends = (primary, fallback, *more_backends)
+        self._backends = (primary, secondary, *more_backends)
         self._health = health
 
     async def is_healthy(self) -> bool:
@@ -148,15 +158,33 @@ class Router(Generic[PrimaryT, FallbackT]):
             last_exc: BaseException | None = None
             for backend, attr in targets[start:]:
                 try:
-                    return await _maybe_await(attr(*args, **kwargs))
+                    result = await _maybe_await(attr(*args, **kwargs))
+                except BluetoothUnconfirmedCommand as e:
+                    # The command may have already executed on this backend;
+                    # replaying it on the next one risks double-executing it.
+                    # Surface the ambiguity to the caller instead of failing over.
+                    LOGGER.debug(
+                        "command=%s backend=%s result=unconfirmed error=%s: %s",
+                        name,
+                        type(backend).__name__,
+                        type(e).__name__,
+                        e,
+                    )
+                    raise
                 except (Exception, TeslaFleetError) as e:  # noqa: BLE001 - any failure -> next backend
                     last_exc = e
                     LOGGER.debug(
-                        "Backend %s call %r failed, routing to next backend: %s",
-                        type(backend).__name__,
+                        "command=%s backend=%s result=error error=%s: %s",
                         name,
+                        type(backend).__name__,
+                        type(e).__name__,
                         e,
                     )
+                    continue
+                LOGGER.debug(
+                    "command=%s backend=%s result=success", name, type(backend).__name__
+                )
+                return result
             # The loop always runs at least once (``start`` only advances past
             # the primary when a later backend remains), so a failure here means
             # every applicable backend raised.
@@ -203,32 +231,6 @@ class Router(Generic[PrimaryT, FallbackT]):
         return self._backends[0]
 
     @property
-    def fallback(self) -> FallbackT:
-        """The first fallback instance, tried when the primary is unhealthy or fails."""
+    def secondary(self) -> SecondaryT:
+        """The second backend, tried when the primary is unhealthy or fails."""
         return self._backends[1]
-
-
-class VehicleRouter(Router[PrimaryT, FallbackT]):
-    """A :class:`Router` over vehicle instances.
-
-    Pairs (or chains) a local primary — typically a :class:`VehicleBluetooth` —
-    with one or more cloud fallbacks (e.g. a ``TeslemetryVehicle``), routing each
-    command to the primary first and failing over down the chain. See
-    :class:`Router` for the full dispatch, failover, and health-check semantics.
-    """
-
-
-class EnergySiteRouter(Router[PrimaryT, FallbackT]):
-    """A :class:`Router` over energy-site instances.
-
-    Pairs (or chains) a local primary — a duck-typed ``EnergySite``-shaped object
-    such as aiopowerwall's ``PowerwallEnergySite`` — with one or more cloud
-    fallbacks (e.g. a ``TeslemetryEnergySite``), routing each command to the local
-    site first and failing over down the chain. See :class:`Router` for the full
-    dispatch, failover, and health-check semantics.
-
-    Example::
-
-        router = EnergySiteRouter(local_energysite, teslemetry_energysite)
-        await router.set_operation(...)  # local first, cloud on failure
-    """

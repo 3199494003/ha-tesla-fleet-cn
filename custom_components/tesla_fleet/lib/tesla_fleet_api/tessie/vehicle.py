@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
-from tesla_fleet_api.const import Method
+from tesla_fleet_api.const import BluetoothConfirmation, Method
 from tesla_fleet_api.tesla.vehicle.vehicles import Vehicles
 from tesla_fleet_api.tesla.vehicle.fleet import VehicleFleet
 
@@ -662,9 +662,7 @@ class TessieVehicle(VehicleFleet["Tessie"]):
         return await self._request(
             Method.POST,
             f"{self.vin}/command/remote_boombox",
-            params=self._command_params(
-                wait_for_completion, max_attempts, sound=sound
-            ),
+            params=self._command_params(wait_for_completion, max_attempts, sound=sound),
         )
 
     async def set_speed_limit(
@@ -1082,6 +1080,20 @@ class TessieVehicle(VehicleFleet["Tessie"]):
             f"{self.vin}/invitations/{id}/revoke",
         )
 
+    async def set_roles(
+        self,
+        role: str,
+        account_id: str | None = None,
+        federation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Assign the subscription or charging payer role (requires a Tesla Business account)."""
+        payload: dict[str, str] = {"role": role}
+        if account_id is not None:
+            payload["account_id"] = account_id
+        if federation_id is not None:
+            payload["federation_id"] = federation_id
+        return await self._request(Method.POST, f"{self.vin}/roles", json=payload)
+
     # Fleet Telemetry
     async def get_fleet_telemetry_config(self) -> dict[str, Any]:
         """Retrieve telemetry configuration."""
@@ -1180,6 +1192,7 @@ class TessieVehicle(VehicleFleet["Tessie"]):
             payload["state"] = state
         return await self._request(Method.POST, f"{self.vin}/plate", json=payload)
 
+
 class TessieVehicles(Vehicles["Tessie"]):
     """Class containing and creating vehicles."""
 
@@ -1200,6 +1213,15 @@ class TessieVehicles(Vehicles["Tessie"]):
         """Creates a specific vehicle."""
         raise NotImplementedError("Tessie cannot use Fleet API directly")
 
-    def createBluetooth(self, vin: str) -> Any:
-        """Creates a specific vehicle."""
+    def createBluetooth(
+        self,
+        vin: str,
+        confirmation: BluetoothConfirmation | bool = "ack",
+        keepalive_interval: float | None = None,
+        optimistic: bool | None = None,
+        raise_unconfirmed: bool = False,
+        *,
+        verify_commands: bool | None = None,
+    ) -> Any:
+        """Not supported; parameters match the Fleet API Bluetooth factory."""
         raise NotImplementedError("Tessie cannot use local Bluetooth")

@@ -4,8 +4,12 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from bleak.backends.device import BLEDevice
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from tesla_fleet_api.const import BluetoothConfirmation
 from tesla_fleet_api.tesla.vehicle.signed import VehicleSigned
-from tesla_fleet_api.tesla.vehicle.bluetooth import VehicleBluetooth
+from tesla_fleet_api.tesla.vehicle.bluetooth import (
+    DEFAULT_KEEPALIVE_INTERVAL,
+    VehicleBluetooth,
+)
 from tesla_fleet_api.tesla.vehicle.fleet import VehicleFleet
 from tesla_fleet_api.tesla.vehicle.vehicle import Vehicle
 
@@ -40,9 +44,39 @@ class Vehicles(dict[str, Vehicle[Any]], Generic[FleetParentT]):
         self[vin] = vehicle
         return vehicle
 
-    def createBluetooth(self, vin: str) -> VehicleBluetooth[FleetParentT]:
-        """Creates a bluetooth vehicle that uses command protocol."""
-        vehicle = self.Bluetooth(self._parent, vin)
+    def createBluetooth(
+        self,
+        vin: str,
+        confirmation: BluetoothConfirmation | bool = "ack",
+        keepalive_interval: float | None = DEFAULT_KEEPALIVE_INTERVAL,
+        optimistic: bool | None = None,
+        raise_unconfirmed: bool = False,
+        *,
+        verify_commands: bool | None = None,
+    ) -> VehicleBluetooth[FleetParentT]:
+        """Creates a bluetooth vehicle that uses command protocol.
+
+        ``confirmation`` sets the confirmation ladder depth: ``"optimistic"``
+        skips reply waits after a confirmed write, ``"ack"`` (default) waits
+        for an addressed ack or a matching state broadcast, ``"verify"``
+        additionally reads back state on an ack/broadcast timeout.
+        ``keepalive_interval`` seconds of GATT idleness triggers a passive read
+        to hold the link open (``None``/``0`` disables).
+        ``raise_unconfirmed=True`` raises ``BluetoothUnconfirmedCommand``
+        instead of resolving a still-inconclusive ladder as a best-effort
+        success. ``verify_commands``/``optimistic`` are deprecated aliases for
+        ``confirmation="verify"``/``confirmation="optimistic"``. See
+        ``VehicleBluetooth``'s docstring for the full ladder.
+        """
+        vehicle = self.Bluetooth(
+            self._parent,
+            vin,
+            confirmation=confirmation,
+            keepalive_interval=keepalive_interval,
+            optimistic=optimistic,
+            raise_unconfirmed=raise_unconfirmed,
+            verify_commands=verify_commands,
+        )
         self[vin] = vehicle
         return vehicle
 
@@ -69,17 +103,74 @@ class VehiclesBluetooth(dict[str, Vehicle[Any]], Generic[BluetoothClientT]):
         vin: str,
         key: ec.EllipticCurvePrivateKey | None = None,
         device: BLEDevice | None = None,
+        confirmation: BluetoothConfirmation | bool = "ack",
+        keepalive_interval: float | None = DEFAULT_KEEPALIVE_INTERVAL,
+        optimistic: bool | None = None,
+        raise_unconfirmed: bool = False,
+        *,
+        verify_commands: bool | None = None,
     ) -> VehicleBluetooth[BluetoothClientT]:
-        """Creates a bluetooth vehicle that uses command protocol."""
-        return self.createBluetooth(vin, key, device)
+        """Creates a bluetooth vehicle that uses command protocol.
+
+        ``confirmation`` sets the confirmation ladder depth: ``"optimistic"``
+        skips reply waits after a confirmed write, ``"ack"`` (default) waits
+        for an addressed ack or a matching state broadcast, ``"verify"``
+        additionally reads back state on an ack/broadcast timeout.
+        ``keepalive_interval`` seconds of GATT idleness triggers a passive read
+        to hold the link open (``None``/``0`` disables).
+        ``raise_unconfirmed=True`` raises ``BluetoothUnconfirmedCommand``
+        instead of resolving a still-inconclusive ladder as a best-effort
+        success. ``verify_commands``/``optimistic`` are deprecated aliases for
+        ``confirmation="verify"``/``confirmation="optimistic"``. See
+        ``VehicleBluetooth``'s docstring for the full ladder.
+        """
+        return self.createBluetooth(
+            vin,
+            key,
+            device,
+            confirmation,
+            keepalive_interval,
+            optimistic,
+            raise_unconfirmed,
+            verify_commands=verify_commands,
+        )
 
     def createBluetooth(
         self,
         vin: str,
         key: ec.EllipticCurvePrivateKey | None = None,
         device: BLEDevice | None = None,
+        confirmation: BluetoothConfirmation | bool = "ack",
+        keepalive_interval: float | None = DEFAULT_KEEPALIVE_INTERVAL,
+        optimistic: bool | None = None,
+        raise_unconfirmed: bool = False,
+        *,
+        verify_commands: bool | None = None,
     ) -> VehicleBluetooth[BluetoothClientT]:
-        """Creates a bluetooth vehicle that uses command protocol."""
-        vehicle = self.Bluetooth(self._parent, vin, key, device)
+        """Creates a bluetooth vehicle that uses command protocol.
+
+        ``confirmation`` sets the confirmation ladder depth: ``"optimistic"``
+        skips reply waits after a confirmed write, ``"ack"`` (default) waits
+        for an addressed ack or a matching state broadcast, ``"verify"``
+        additionally reads back state on an ack/broadcast timeout.
+        ``keepalive_interval`` seconds of GATT idleness triggers a passive read
+        to hold the link open (``None``/``0`` disables).
+        ``raise_unconfirmed=True`` raises ``BluetoothUnconfirmedCommand``
+        instead of resolving a still-inconclusive ladder as a best-effort
+        success. ``verify_commands``/``optimistic`` are deprecated aliases for
+        ``confirmation="verify"``/``confirmation="optimistic"``. See
+        ``VehicleBluetooth``'s docstring for the full ladder.
+        """
+        vehicle = self.Bluetooth(
+            self._parent,
+            vin,
+            key,
+            device,
+            confirmation=confirmation,
+            keepalive_interval=keepalive_interval,
+            optimistic=optimistic,
+            raise_unconfirmed=raise_unconfirmed,
+            verify_commands=verify_commands,
+        )
         self[vin] = vehicle
         return vehicle

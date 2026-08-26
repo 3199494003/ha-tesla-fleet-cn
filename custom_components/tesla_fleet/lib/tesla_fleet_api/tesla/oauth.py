@@ -68,11 +68,7 @@ class TeslaFleetOAuth(TeslaFleetApi):
             self.server = SERVERS.get(self.region)
 
         async with self.session.post(
-            (
-                "https://auth.tesla.cn/oauth2/v3/token"
-                if self.region == "cn"
-                else "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
-            ),
+            "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token",
             data={
                 "grant_type": "authorization_code",
                 "client_id": self.client_id,
@@ -110,11 +106,7 @@ class TeslaFleetOAuth(TeslaFleetApi):
         if not self.refresh_token:
             raise ValueError("Refresh token is missing")
         async with self.session.post(
-            (
-                "https://auth.tesla.cn/oauth2/v3/token"
-                if self.region == "cn"
-                else "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
-            ),
+            "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token",
             data={
                 "grant_type": "refresh_token",
                 "client_id": self.client_id,

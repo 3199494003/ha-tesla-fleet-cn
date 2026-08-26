@@ -28,6 +28,67 @@ class BluetoothTimeout(TeslaFleetError):
     message = "Bluetooth command timed out waiting for vehicle response."
 
 
+class BluetoothUnconfirmedCommand(BluetoothTimeout):
+    """A mutating Bluetooth command has an unresolved delivery outcome.
+
+    The write either completed and its ack was lost, or it entered backend I/O
+    and then failed/timed out in a way that cannot prove whether the vehicle
+    received it. The vehicle may have executed the command - lock/unlock have
+    both been observed to execute despite this exception. Treat the outcome as
+    unknown, not failed: verify by reading state back when possible, and never
+    blind-retry or re-issue the same command on another transport, since it may
+    already have run.
+
+    Subclasses ``BluetoothTimeout`` so existing ``except BluetoothTimeout``
+    handling still catches it, while remaining distinguishable from it (and
+    from ``BluetoothTransportError``, the provable pre-submission transport
+    failure) for callers that want to react to the ambiguity specifically -
+    e.g. a BLE-primary/cloud-fallback router should not fail over on this
+    exception, since failing over risks double-executing the command.
+    """
+
+    message = (
+        "Bluetooth command timed out waiting for an ack after being written to "
+        "the vehicle; it may have executed anyway."
+    )
+
+
+class BluetoothCommandFailed(TeslaFleetError):
+    """A mutating Bluetooth command was proven NOT to have taken effect.
+
+    Unlike ``BluetoothUnconfirmedCommand`` (ack lost, outcome unknown), this
+    means a state check - a ``confirmation="verify"`` post-timeout read, or
+    the vehicle's own status broadcast still showing a different value once
+    the whole confirmation window elapsed - actively contradicted the
+    requested end state. That makes it safe to fail over: a router replaying the
+    command on a fallback transport is not at risk of double-executing an
+    already-applied command, because this one demonstrably did not apply.
+    Deliberately does NOT subclass ``BluetoothTimeout``/
+    ``BluetoothUnconfirmedCommand`` so a fallback router's per-command
+    failover (which only special-cases the ambiguous case) treats it like any
+    other ordinary failure and tries the next backend.
+    """
+
+    message = "Bluetooth command was proven not to have taken effect."
+
+
+class BluetoothTransportError(TeslaFleetError):
+    """The Bluetooth transport failed provably before the write reached the vehicle.
+
+    Covers connect, notify-subscribe, and GATT characteristic-resolution
+    failures - all raised by the local BLE stack before any bytes go out over
+    the air, so a fallback router can safely retry the same command
+    elsewhere. A GATT write that entered backend I/O and then failed or timed
+    out is delivery-ambiguous instead (the write may have reached the
+    vehicle) and raises ``BluetoothTimeout``/``BluetoothUnconfirmedCommand``,
+    not this class - see those exceptions.
+    """
+
+    message = (
+        "The Bluetooth transport failed before a vehicle response could be awaited."
+    )
+
+
 class ResponseError(TeslaFleetError):
     """The response from the server was not JSON."""
 
@@ -142,6 +203,18 @@ class OAuthExpired(TeslaFleetError):
     message = "The OAuth token has expired."
     status = 401
     key = "token expired (401)"
+
+
+class TeslemetryRegistrationError(TeslaFleetError):  # Teslemetry specific
+    """Teslemetry OAuth dynamic client registration (RFC 7591) failed.
+
+    Covers a transport/timeout failure reaching the registration endpoint, a
+    non-2xx response, a response body that isn't valid JSON, and a
+    well-formed response missing a usable ``client_id``. The specific reason
+    is carried in ``data``.
+    """
+
+    message = "Teslemetry dynamic client registration failed."
 
 
 class LoginRequired(TeslaFleetError):  # Native and Teslemetry
@@ -333,6 +406,80 @@ class DeviceUnexpectedResponse(TeslaFleetError):
 
 class LibraryError(Exception):
     """Errors related to this library."""
+
+
+class SignedCommandRequired(TeslaFleetError):
+    """The requested action requires a signed command; the unsigned cloud API cannot actuate it.
+
+    Energy gateways have been observed acknowledging this class of unsigned
+    ``grpc_command`` without physically operating the grid contactor - see
+    ``EnergySite.set_island_mode``. Pair an RSA key with
+    ``EnergySite.add_authorized_client`` and issue the command through a
+    signed local LAN backend (composed via ``EnergySiteRouter``) instead.
+    """
+
+    message = (
+        "This command cannot actuate via the unsigned cloud API - gateways "
+        "acknowledge it without operating the contactor. Pair a key with "
+        "add_authorized_client and issue it through a signed local control "
+        "path (EnergySiteRouter) instead."
+    )
+
+
+class AuthorizedClientPairingTimedOut(TeslaFleetError):
+    """An energy gateway's presence-proof window expired before verification.
+
+    The gateway itself reported the terminal ``PENDING_VERIFICATION_TIMEOUT``
+    state (``AuthorizedClientState``) - the ~9-minute window to confirm the
+    key (typically via a physical breaker/switch toggle) closed with no
+    confirmation. The registration is dead; re-register the *same* public
+    key with ``add_authorized_client`` to reset the window and retry, rather
+    than generating a new key.
+    """
+
+    message = (
+        "Authorized-client pairing timed out: the presence-proof window "
+        "expired (PENDING_VERIFICATION_TIMEOUT). Re-register the same "
+        "public key to reset the window and retry."
+    )
+
+
+class AuthorizedClientWaitExpired(TeslaFleetError):
+    """``wait_until_paired()``'s own bounded overall wait elapsed.
+
+    Distinct from ``AuthorizedClientPairingTimedOut``: the gateway had not
+    reported a terminal state (the registration may still be alive, e.g.
+    still ``PENDING_VERIFICATION``, or the local ``verify_by_use`` check
+    kept failing) when the caller's ``timeout`` ran out. Retry by calling
+    ``wait_until_paired()`` again.
+    """
+
+    message = "Timed out waiting for authorized-client pairing to complete."
+
+
+class SessionInfoAuthenticationFault(TeslaFleetError):
+    """A ``session_info`` reply failed local authentication and was discarded.
+
+    Raised when the reply's ``session_info_tag`` HMAC does not verify, is
+    absent, the echoed ``request_uuid`` does not match the outstanding
+    request it claims to answer, or its clock time regresses within the same
+    epoch. The session's prior state is left unmodified.
+    """
+
+    message = "Session info reply failed authentication and was discarded."
+
+
+class SignedCommandResponseReplayed(TeslaFleetError):
+    """A signed command response reused a counter value already seen on this session.
+
+    protocol.md requires rejecting a response whose counter has previously
+    been used, to prevent an attacker from replaying a captured encrypted
+    response back at the client.
+    """
+
+    message = (
+        "Signed command response reused an already-seen counter; discarded as a replay."
+    )
 
 
 class TeslaFleetInformationFault(TeslaFleetError):

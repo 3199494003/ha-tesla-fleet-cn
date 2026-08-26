@@ -5,6 +5,7 @@ from time import time
 from typing import TYPE_CHECKING, Any, Generic, List, TypeVar
 
 from tesla_fleet_api.const import (
+    AutoSeat,
     CabinOverheatProtectionTemp,
     ClimateKeeperMode,
     Level,
@@ -41,7 +42,7 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
         )
 
     async def adjust_volume(self, volume: float) -> dict[str, Any]:
-        """Adjusts vehicle media playback volume."""
+        """Adjusts vehicle media playback volume from 0.0 to 11.0."""
         if volume < 0.0 or volume > 11.0:
             raise ValueError("Volume must a number from 0.0 to 11.0")
         return await self._request(
@@ -193,9 +194,14 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
         )
 
     async def navigation_gps_request(
-        self, lat: float, lon: float, order: int | None = None
+        self, lat: float, lon: float, order: int = 0
     ) -> dict[str, Any]:
-        """Start navigation to given coordinates. Order can be used to specify order of multiple stops."""
+        """Start navigation to coordinates.
+
+        ``order`` is the Tesla remote-nav order integer: 1 replaces the trip,
+        2 prepends a stop, and 3 appends a stop. Defaults to 0
+        (``REMOTE_NAV_TRIP_ORDER_UNKNOWN``) when omitted, matching the BLE path.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/navigation_gps_request",
@@ -233,12 +239,26 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
             json={"id": id, "order": order},
         )
 
+    async def navigation_waypoints_request(self, waypoints: str) -> dict[str, Any]:
+        """Sends a list of waypoints to the vehicle's navigation system."""
+        return await self._request(
+            Method.POST,
+            f"api/1/vehicles/{self.vin}/command/navigation_waypoints_request",
+            json={"waypoints": waypoints},
+        )
+
     async def remote_auto_seat_climate_request(
         self,
-        auto_seat_position: int | Seat,
+        auto_seat_position: int | AutoSeat,
         auto_climate_on: bool,
     ) -> dict[str, Any]:
-        """Sets automatic seat heating and cooling."""
+        """Sets automatic seat heating and cooling.
+
+        ``auto_seat_position`` is 1-indexed (``AutoSeat.FRONT_LEFT`` == 1),
+        matching Tesla's wire values for this endpoint.
+        The vehicle can reject remote comfort commands when
+        ``climate_state().remote_heater_control_enabled`` is false.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/remote_auto_seat_climate_request",
@@ -251,7 +271,11 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
     async def remote_auto_steering_wheel_heat_climate_request(
         self, on: bool
     ) -> dict[str, Any]:
-        """Sets automatic steering wheel heating on/off."""
+        """Sets automatic steering wheel heating on/off.
+
+        The vehicle can reject remote comfort commands when
+        ``climate_state().remote_heater_control_enabled`` is false.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/remote_auto_steering_wheel_heat_climate_request",
@@ -286,7 +310,11 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
         seat_position: Seat | int,
         seat_heater_level: Level | int,
     ) -> dict[str, Any]:
-        """Sets seat heating."""
+        """Sets seat heating.
+
+        The vehicle can reject remote comfort commands when
+        ``climate_state().remote_heater_control_enabled`` is false.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/remote_seat_heater_request",
@@ -305,7 +333,11 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
     async def remote_steering_wheel_heat_level_request(
         self, level: Level | int
     ) -> dict[str, Any]:
-        """Sets steering wheel heat level."""
+        """Sets steering wheel heat level.
+
+        The vehicle can reject remote comfort commands when
+        ``climate_state().remote_heater_control_enabled`` is false.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/remote_steering_wheel_heat_level_request",
@@ -313,7 +345,12 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
         )
 
     async def remote_steering_wheel_heater_request(self, on: bool) -> dict[str, Any]:
-        """Sets steering wheel heating on/off. For vehicles that do not support auto steering wheel heat."""
+        """Sets steering wheel heating on/off.
+
+        For vehicles that do not support auto steering wheel heat. The vehicle
+        can reject remote comfort commands when
+        ``climate_state().remote_heater_control_enabled`` is false.
+        """
         return await self._request(
             Method.POST,
             f"api/1/vehicles/{self.vin}/command/remote_steering_wheel_heater_request",
@@ -554,7 +591,8 @@ class VehicleFleet(Vehicle[FleetParentT], Generic[FleetParentT]):
         data: dict[str, str | float] = {}
         if token:
             data["token"] = token
-        if lat and lon:
+        # Guard on None, not truthiness: lat/lon of 0.0 are valid coordinates.
+        if lat is not None and lon is not None:
             data["lat"] = lat
             data["lon"] = lon
         return await self._request(
