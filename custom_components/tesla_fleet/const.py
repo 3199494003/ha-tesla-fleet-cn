@@ -18,8 +18,13 @@ REGIONS = list(REGION_SERVERS)
 
 LOGGER = logging.getLogger(__package__)
 
-AUTHORIZE_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/authorize"
-TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+# China-region OAuth endpoints. Mainland China accounts must authenticate
+# against auth.tesla.cn (the international fleet-auth.prd.vn.cloud.tesla.com
+# does not recognize China-registered client_ids -> "Client authentication
+# failed"). Verified via auth.tesla.cn/oauth2/v3/thirdparty/.well-known/
+# openid-configuration.
+AUTHORIZE_URL = "https://auth.tesla.cn/oauth2/v3/authorize"
+TOKEN_URL = "https://auth.tesla.cn/oauth2/v3/token"
 
 SCOPES = [
     Scope.OPENID,

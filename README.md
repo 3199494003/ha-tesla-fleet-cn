@@ -9,6 +9,7 @@ Home Assistant 官方 **Tesla Fleet** 集成不支持中国大陆账号（官方
 | 文件 | 改动 |
 | --- | --- |
 | `const.py` | 去掉 `REGION_SERVERS` 里对 `"cn"` 的排除（`if region != "cn"`），使中国区重新出现在区域选项里 |
+| `const.py` | **OAuth 认证端点改为中国区**：`authorize` 和 `token` 改用 `auth.tesla.cn`（中国区应用在国际端点 `fleet-auth...tesla.com` 会报 `Client authentication failed`） |
 | `strings.json` | 区域下拉新增 `China / 中国大陆` 选项 |
 | `config_flow.py` | 中国区选定时，域名注册提示链接指向中国区开发者门户 `developer.tesla.cn` |
 
