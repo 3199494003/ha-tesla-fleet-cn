@@ -237,6 +237,19 @@ class TeslaFleetApi(Tesla):
             "api/1/products",
         )
 
+    def _get_token_endpoint(self) -> str:
+        """Return the regional OAuth token endpoint.
+
+        Upstream hardcodes the international fleet-auth.prd.vn.cloud.tesla.com,
+        which rejects CN client IDs with 'The request body is not valid'.
+        CN's whole OAuth (authorize + token) lives on auth.tesla.cn
+        (verified via its OIDC metadata: token_endpoint=https://auth.tesla.cn/oauth2/v3/token;
+        fleet-auth.prd.cn.vn.cloud.tesla.cn does NOT resolve).
+        """
+        if self.region == "cn" or (self.server and ".cn" in self.server):
+            return "https://auth.tesla.cn/oauth2/v3/token"
+        return "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
+
     async def partner_login(
         self,
         client_id: str,
@@ -267,7 +280,7 @@ class TeslaFleetApi(Tesla):
         }
 
         async with self.session.post(
-            "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token",
+            self._get_token_endpoint(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=data,
         ) as resp:
