@@ -1,0 +1,278 @@
+"""Tesla Fleet API constants."""
+
+import logging
+from enum import Enum
+from typing import Literal, TypeGuard
+
+LOGGER = logging.getLogger(__package__)
+
+Region = Literal["na", "eu", "cn"]
+
+SERVERS: dict[Region, str] = {
+    "na": "https://fleet-api.prd.na.vn.cloud.tesla.com",
+    "eu": "https://fleet-api.prd.eu.vn.cloud.tesla.com",
+    "cn": "https://fleet-api.prd.cn.vn.cloud.tesla.cn",
+}
+
+
+def is_valid_region(value: str) -> TypeGuard[Region]:
+    """Check if a string is a valid region and narrow its type."""
+    return value in SERVERS
+
+
+class IntEnum(int, Enum):
+    """Integer Enum."""
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class StrEnum(str, Enum):
+    """String Enum."""
+
+    def __str__(self) -> str:
+        return self.value
+
+
+class Method(StrEnum):
+    """HTTP Methods."""
+
+    GET = "GET"
+    POST = "POST"
+    DELETE = "DELETE"
+    PATCH = "PATCH"
+
+
+class Trunk(StrEnum):
+    """Trunk options"""
+
+    FRONT = "front"
+    REAR = "rear"
+
+
+class Seat(IntEnum):
+    """Seat positions"""
+
+    FRONT_LEFT = 0
+    FRONT_RIGHT = 1
+    REAR_LEFT = 2
+    REAT_LEFT_BACK = 3
+    REAR_CENTER = 4
+    REAR_RIGHT = 5
+    REAR_RIGHT_BACK = 6
+    THIRD_LEFT = 7
+    THIRD_RIGHT = 8
+
+
+class AutoSeat(IntEnum):
+    """Auto Climate Seat positions"""
+
+    FRONT_LEFT = 1
+    FRONT_RIGHT = 2
+
+
+class Level(IntEnum):
+    """Level options"""
+
+    OFF = 0
+    LOW = 1
+    MEDIUM = 2
+    HIGH = 3
+
+
+class ClimateKeeperMode(IntEnum):
+    """Climate Keeper Mode options"""
+
+    OFF = 0
+    KEEP_MODE = 1
+    DOG_MODE = 2
+    CAMP_MODE = 3
+
+
+class CabinOverheatProtectionTemp(IntEnum):
+    """COP Temp options"""
+
+    LOW = 0  # 30C 90F
+    MEDIUM = 1  # 35C 95F
+    HIGH = 2  # 40C 100F
+
+
+class VehicleDataEndpoint(StrEnum):
+    """Endpoints options"""
+
+    CHARGE_STATE = "charge_state"
+    CLIMATE_STATE = "climate_state"
+    CLOSURES_STATE = "closures_state"
+    DRIVE_STATE = "drive_state"
+    GUI_SETTINGS = "gui_settings"
+    LOCATION_DATA = "location_data"
+    CHARGE_SCHEDULE_DATA = "charge_schedule_data"
+    PRECONDITIONING_SCHEDULE_DATA = "preconditioning_schedule_data"
+    VEHICLE_CONFIG = "vehicle_config"
+    VEHICLE_STATE = "vehicle_state"
+    VEHICLE_DATA_COMBO = "vehicle_data_combo"
+
+
+class SunRoofCommand(StrEnum):
+    """Sunroof options"""
+
+    STOP = "stop"
+    CLOSE = "close"
+    VENT = "vent"
+
+
+class WindowCommand(StrEnum):
+    """Window Control options"""
+
+    VENT = "vent"
+    CLOSE = "close"
+
+
+class DeviceType(StrEnum):
+    """Device Type options"""
+
+    ANDROID = "android"
+    IOS_DEVELOPMENT = "ios-development"
+    IOS_ENTERPRISE = "ios-enterprise"
+    IOS_BETA = "ios-beta"
+    IOS_PRODUCTION = "ios-production"
+
+
+class Scope(StrEnum):
+    """Fleet API Scope"""
+
+    OPENID = "openid"
+    EMAIL = "email"
+    PROFILE = "profile"
+    METADATA = "metadata"
+    OFFLINE_ACCESS = "offline_access"
+    USER_DATA = "user_data"
+    VEHICLE_DEVICE_DATA = "vehicle_device_data"
+    VEHICLE_LOCATION = "vehicle_location"
+    VEHICLE_CMDS = "vehicle_cmds"
+    VEHICLE_CHARGING_CMDS = "vehicle_charging_cmds"
+    ENERGY_DEVICE_DATA = "energy_device_data"
+    ENERGY_CMDS = "energy_cmds"
+
+
+class EnergyOperationMode(StrEnum):
+    """Energy Operation Mode options"""
+
+    AUTONOMOUS = "autonomous"
+    SELF_CONSUMPTION = "self_consumption"
+    BACKUP = "backup"
+
+
+class EnergyExportMode(StrEnum):
+    """Energy Export Mode options"""
+
+    BATTERY_OK = "battery_ok"
+    PV_ONLY = "pv_only"
+    NEVER = "never"
+
+
+class TeslaEnergyPeriod(StrEnum):
+    """Period for history for energy sites"""
+
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    YEAR = "year"
+    LIFETIME = "lifetime"
+
+
+class EnergyIslandMode(IntEnum):
+    """Island mode values for setIslandModeRequest.
+
+    Discovered via mitmproxy capture of the Tesla mobile app and
+    confirmed on PW2 (firmware 26.10.0) and PW3 (firmware 26.2.1).
+
+    Mode 6 physically opens the grid contactor (off-grid) when sent
+    with force=True. Mode 1 physically closes it (reconnect / on-grid).
+
+    Note: mode=2 (previously assumed by the community to be off-grid)
+    sets a preference but does NOT physically operate the contactor
+    on either PW2 or PW3.
+    """
+
+    ON_GRID = 1
+    OFF_GRID = 6
+
+
+class EnergyDeviceIdentifierType(IntEnum):
+    """Identifier type for energy device gRPC commands."""
+
+    GATEWAY_DIN = 1
+    SITE_UUID = 2
+    SOLAR_INVERTER_DIN = 3
+    WALL_CONNECTOR_DIN = 4
+
+
+class AuthorizedClientKeyType(IntEnum):
+    """Key type for energy gateway authorized clients.
+
+    Note: Tesla has not published the full ``key_type`` enum body. The RSA
+    value below is empirically known to work for registering an RSA-4096
+    key via ``add_authorized_client_request``; other values may exist but
+    are not publicly documented.
+    """
+
+    RSA = 1
+
+
+class AuthorizedClientType(IntEnum):
+    """Client type used when registering an authorized client on an energy gateway.
+
+    Sourced from Tesla's ``AuthorizedClientType`` protobuf enum (as
+    reverse-engineered in pypowerwall's ``tedapi_combined.proto``).
+
+    There is no WiFi-specific value: WiFi vs LAN refers to the transport,
+    not the client type. pypowerwall's v1r flow registers its RSA key as
+    ``CUSTOMER_MOBILE_APP``.
+    """
+
+    INVALID = 0
+    CUSTOMER_MOBILE_APP = 1
+    VEHICLE = 2
+
+
+class AuthorizedClientState(IntEnum):
+    """State of an authorized client registered on an energy gateway."""
+
+    PENDING = 1
+    PENDING_VERIFICATION = 2
+    VERIFIED = 3
+
+
+class ClosureState(StrEnum):
+    """Closure state options"""
+
+    NONE = "none"
+    MOVE = "move"
+    STOP = "stop"
+    OPEN = "open"
+    CLOSE = "close"
+
+
+class SeatHeaterLevel(StrEnum):
+    """Seat heater level options"""
+
+    OFF = "off"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class BluetoothVehicleData(StrEnum):
+    CHARGE_STATE = "GetChargeState"
+    CLIMATE_STATE = "GetClimateState"
+    DRIVE_STATE = "GetDriveState"
+    LOCATION_STATE = "GetLocationState"
+    CLOSURES_STATE = "GetClosuresState"
+    CHARGE_SCHEDULE_STATE = "GetChargeScheduleState"
+    PRECONDITIONING_SCHEDULE_STATE = "GetPreconditioningScheduleState"
+    TIRE_PRESSURE_STATE = "GetTirePressureState"
+    MEDIA_STATE = "GetMediaState"
+    MEDIA_DETAIL_STATE = "GetMediaDetailState"
+    SOFTWARE_UPDATE_STATE = "GetSoftwareUpdateState"
+    PARENTAL_CONTROLS_STATE = "GetParentalControlsState"

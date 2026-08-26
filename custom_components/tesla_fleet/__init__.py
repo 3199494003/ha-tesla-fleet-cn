@@ -1,5 +1,12 @@
 """Tesla Fleet integration."""
 
+import sys
+from pathlib import Path
+
+# Prefer the vendored, China-patched tesla-fleet-api library over any
+# site-packages copy (its partner/token endpoints use auth.tesla.cn for cn).
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+
 from typing import Final
 
 import jwt

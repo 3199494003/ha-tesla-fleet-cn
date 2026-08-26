@@ -8,6 +8,6 @@
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "loggers": ["tesla-fleet-api"],
-  "requirements": ["tesla-fleet-api==1.10.0"],
-  "version": "1.1.0"
+  "requirements": ["bleak", "bleak-retry-connector", "protobuf", "aiofiles"],
+  "version": "1.2.0"
 }
